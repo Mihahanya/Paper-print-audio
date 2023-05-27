@@ -13,7 +13,8 @@ def signal_to_data_array(signal_arr, orig_freq, new_freq, max_amplitude, pixel_h
     frames_n_with_new_freq = math.ceil(time_length * new_freq)
     spec_arr = np.zeros((frames_n_with_new_freq, pixel_height*2), dtype=np.float64)
 
-    for i in range(len(signal_arr)):
+    #for i in tqdm(range(signal_arr.shape[0])):
+    for i in tqdm(range(1000000)):
         w = signal_arr[i]
         if w >= max_amplitude or w <= -max_amplitude: continue
 
@@ -28,21 +29,26 @@ def signal_to_data_array(signal_arr, orig_freq, new_freq, max_amplitude, pixel_h
     return spec_arr
 
 
-def apply_sound_data_to_img(img, sound_data):
+def apply_sound_data_to_img(img, sound_data, pixel_height, margin):
     img_arr = np.array(img)
-    w = img_arr.shape[1] - MARGIN*2
+    w, h = img_arr.shape[1] - margin*2, img_arr.shape[0] - margin*2
+
+    sound_data = np.array_split(sound_data, math.ceil(len(sound_data) / w))
+
+    if len(sound_data) * pixel_height * 2 > h:
+        print('Waring: not enough space')
+        print(f'it\'s possible only to {round(h / len(sound_data) / pixel_height / 2 * 100, 1)}%')
+        sound_data = sound_data[:h // 2 // pixel_height]
 
     for i in tqdm(range(len(sound_data))):
-        for j in range(len(sound_data[0])):
-            from_x, from_y = i % w, i // w * HEIGHT * 2
-            y, x = MARGIN + from_y + j, MARGIN + from_x
+        img_like_sound = np.expand_dims(sound_data[i], axis=-1)
+        img_like_sound = np.repeat(img_like_sound, 3, axis=-1)
+        img_like_sound = np.swapaxes(img_like_sound, 0, 1)
 
-            if y >= img_arr.shape[0] - MARGIN:
-                print('Waring: not enough space')
-                print(f'it\'s possible only to {round((i+1)/len(sound_data)*100, 1)}%')
-                return img_arr
+        from_y = i * pixel_height * 2 + margin
+        to_y = from_y + pixel_height * 2
 
-            img_arr[y][x] -= int(sound_data[i][j])
+        img_arr[from_y:to_y, margin:margin+img_like_sound.shape[1], :] -= img_like_sound.astype('uint8')
 
     return img_arr
 
@@ -50,7 +56,7 @@ def apply_sound_data_to_img(img, sound_data):
 if __name__ == "__main__":
     print('Processing audio to picture')
 
-    wav_obj = wave.open('sounds/short_test.wav', 'rb')
+    wav_obj = wave.open('sounds/fly me to the moon.wav', 'rb')
 
     sample_freq = wav_obj.getframerate()
     samples_n = wav_obj.getnframes()
@@ -75,7 +81,7 @@ if __name__ == "__main__":
     print('Contrast:', np.mean(data_to_print))
 
     img_layout = np.array(cv2.imread('layout.png'))
-    res_img = apply_sound_data_to_img(img_layout, data_to_print)
+    res_img = apply_sound_data_to_img(img_layout, data_to_print, HEIGHT, MARGIN)
     cv2.imwrite('res.png', res_img)
 
     print('Finish!!!')
